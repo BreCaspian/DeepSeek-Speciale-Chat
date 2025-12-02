@@ -70,7 +70,7 @@ async function sendMsg() {
   msgInput.value = "";
 
   // 调用你的后端代理（下一步会部署）
-  const res = await fetch("https://deepseek-speciale-chat.vercel.app/", {
+  const res = await fetch("https://deepseek-speciale-chat.vercel.app/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ message: text })
