@@ -1,85 +1,432 @@
 <!DOCTYPE html>
 <html lang="zh">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>DeepSeek-Speciale Chat</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DeepSeek-Speciale Chat</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
 
-<style>
-body {
-  font-family: Arial;
-  background: #f5f5f5;
-  margin: 0;
-}
-.chat-container {
-  max-width: 800px;
-  margin: auto;
-  padding: 20px;
-}
-.message {
-  padding: 12px 16px;
-  margin: 10px 0;
-  border-radius: 10px;
-  max-width: 80%;
-  word-break: break-word;
-}
-.user {
-  background: #4a90e2;
-  color: white;
-  align-self: flex-end;
-}
-.bot {
-  background: white;
-  border: 1px solid #ddd;
-}
-input {
-  width: 80%;
-  padding: 10px;
-  font-size: 16px;
-}
-button {
-  padding: 10px 16px;
-  font-size: 16px;
-  cursor: pointer;
-}
-.chat-box {
-  display: flex;
-  flex-direction: column;
-}
-</style>
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #0f172a;
+      color: #0f172a;
+      display: flex;
+      justify-content: center;
+      align-items: stretch;
+      min-height: 100vh;
+    }
+
+    .app {
+      flex: 1;
+      display: flex;
+      justify-content: center;
+      padding: 16px;
+    }
+
+    .chat-container {
+      background: #f9fafb;
+      width: 100%;
+      max-width: 900px;
+      border-radius: 16px;
+      box-shadow: 0 20px 40px rgba(15, 23, 42, 0.4);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .chat-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid #e5e7eb;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: linear-gradient(to right, #0f172a, #1f2937);
+      color: #f9fafb;
+    }
+
+    .chat-header-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .chat-title {
+      font-size: 18px;
+      font-weight: 700;
+    }
+
+    .model-badge {
+      font-size: 12px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      border: 1px solid rgba(148, 163, 184, 0.7);
+      color: #e5e7eb;
+    }
+
+    .chat-header-right {
+      font-size: 12px;
+      color: #cbd5f5;
+      opacity: 0.9;
+    }
+
+    .chat-main {
+      flex: 1;
+      padding: 16px 20px;
+      overflow-y: auto;
+      background: radial-gradient(circle at top, #e5e7eb 0, #f9fafb 40%, #e5e7eb 100%);
+    }
+
+    .message-row {
+      display: flex;
+      margin-bottom: 12px;
+    }
+
+    .message-row.user {
+      justify-content: flex-end;
+    }
+
+    .message-bubble {
+      max-width: min(80%, 620px);
+      padding: 10px 12px;
+      border-radius: 16px;
+      word-break: break-word;
+      font-size: 14px;
+      line-height: 1.5;
+      position: relative;
+    }
+
+    .message-meta {
+      font-size: 11px;
+      color: #9ca3af;
+      margin-top: 4px;
+      text-align: right;
+    }
+
+    .message-row.bot .message-meta {
+      text-align: left;
+    }
+
+    .message-bubble.user {
+      background: #2563eb;
+      color: #f9fafb;
+      border-bottom-right-radius: 4px;
+    }
+
+    .message-bubble.bot {
+      background: #ffffff;
+      border: 1px solid #e5e7eb;
+      border-bottom-left-radius: 4px;
+    }
+
+    .avatar {
+      width: 30px;
+      height: 30px;
+      border-radius: 999px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      margin-right: 8px;
+      flex-shrink: 0;
+    }
+
+    .message-row.user .avatar {
+      margin-right: 0;
+      margin-left: 8px;
+    }
+
+    .avatar.bot {
+      background: #0f172a;
+      color: #e5e7eb;
+      font-weight: 700;
+    }
+
+    .avatar.user {
+      background: #dbeafe;
+      color: #1d4ed8;
+      font-weight: 600;
+    }
+
+    .chat-footer {
+      border-top: 1px solid #e5e7eb;
+      padding: 10px 16px 14px;
+      background: #f3f4f6;
+    }
+
+    .input-row {
+      display: flex;
+      gap: 8px;
+      align-items: flex-end;
+    }
+
+    .input-row textarea {
+      flex: 1;
+      resize: none;
+      min-height: 40px;
+      max-height: 120px;
+      padding: 8px 10px;
+      border-radius: 10px;
+      border: 1px solid #d1d5db;
+      font-size: 14px;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+      background: #ffffff;
+    }
+
+    .input-row textarea:focus {
+      border-color: #2563eb;
+      box-shadow: 0 0 0 1px #2563eb33;
+      background: #ffffff;
+    }
+
+    .send-btn {
+      padding: 9px 16px;
+      border-radius: 999px;
+      border: none;
+      background: #2563eb;
+      color: #f9fafb;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      box-shadow: 0 4px 10px rgba(37, 99, 235, 0.4);
+      white-space: nowrap;
+      transition: background 0.15s, transform 0.05s, box-shadow 0.15s, opacity 0.15s;
+    }
+
+    .send-btn:hover {
+      background: #1d4ed8;
+      box-shadow: 0 6px 16px rgba(37, 99, 235, 0.6);
+      transform: translateY(-1px);
+    }
+
+    .send-btn:active {
+      transform: translateY(0);
+      box-shadow: 0 3px 8px rgba(37, 99, 235, 0.4);
+    }
+
+    .send-btn:disabled {
+      opacity: 0.6;
+      cursor: default;
+      transform: none;
+      box-shadow: none;
+    }
+
+    .hint-row {
+      margin-top: 6px;
+      font-size: 11px;
+      color: #9ca3af;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .status {
+      font-size: 11px;
+      color: #6b7280;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .dot-pulse {
+      display: inline-flex;
+      gap: 3px;
+      margin-left: 2px;
+    }
+
+    .dot-pulse span {
+      width: 4px;
+      height: 4px;
+      border-radius: 999px;
+      background: #6b7280;
+      animation: pulse 1s infinite ease-in-out;
+    }
+
+    .dot-pulse span:nth-child(2) {
+      animation-delay: 0.15s;
+    }
+
+    .dot-pulse span:nth-child(3) {
+      animation-delay: 0.3s;
+    }
+
+    @keyframes pulse {
+      0%, 100% { transform: translateY(0); opacity: 0.5; }
+      50% { transform: translateY(-2px); opacity: 1; }
+    }
+
+    @media (max-width: 640px) {
+      .chat-container {
+        border-radius: 0;
+        box-shadow: none;
+      }
+      .chat-main {
+        padding-inline: 12px;
+      }
+      .chat-header {
+        padding-inline: 12px;
+      }
+      .chat-footer {
+        padding-inline: 10px;
+      }
+    }
+  </style>
 </head>
 
 <body>
-<div class="chat-container">
-  <h2>DeepSeek Speciale Chat</h2>
-  <div id="chat" class="chat-box"></div>
+<div class="app">
+  <div class="chat-container">
+    <div class="chat-header">
+      <div class="chat-header-left">
+        <div class="chat-title">DeepSeek-Speciale Chat</div>
+        <div class="model-badge">V3.2 Speciale · Reasoning</div>
+      </div>
+      <div class="chat-header-right">
+        回车发送 · Shift+回车换行
+      </div>
+    </div>
 
-  <input id="msg" placeholder="输入消息..." />
-  <button onclick="sendMsg()">发送</button>
+    <div id="chat" class="chat-main">
+      <!-- 初始欢迎消息 -->
+    </div>
+
+    <div class="chat-footer">
+      <div class="input-row">
+        <textarea
+          id="msg"
+          placeholder="输入消息，按 Enter 发送，Shift+Enter 换行"
+        ></textarea>
+        <button id="sendBtn" class="send-btn" onclick="sendMsg()">
+          <span>发送</span>
+          <span>➤</span>
+        </button>
+      </div>
+      <div class="hint-row">
+        <div class="status" id="statusText">
+          已就绪
+        </div>
+        <div style="font-size:11px;color:#9ca3af;">
+          模型：DeepSeek-V3.2-Speciale
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script>
-async function sendMsg() {
-  const chat = document.getElementById("chat");
-  const msgInput = document.getElementById("msg");
-  const text = msgInput.value;
-  if (!text) return;
+  const chatEl = document.getElementById("chat");
+  const inputEl = document.getElementById("msg");
+  const sendBtn = document.getElementById("sendBtn");
+  const statusText = document.getElementById("statusText");
 
-  // 显示用户消息
-  chat.innerHTML += `<div class="message user">${text}</div>`;
-  msgInput.value = "";
+  // 初始化一条欢迎消息
+  addMessage("bot", "你好，我是接入 DeepSeek-Speciale 的小助手，可以帮你做推理、写代码、分析问题。你想从哪里开始？");
 
-  // 调用你的后端代理（下一步会部署）
-  const res = await fetch("https://deepseek-speciale-chat.vercel.app/api/chat", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message: text })
+  // 监听键盘：Enter 发送，Shift+Enter 换行
+  inputEl.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendMsg();
+    }
   });
 
-  const data = await res.json();
+  function setLoading(isLoading) {
+    if (isLoading) {
+      sendBtn.disabled = true;
+      sendBtn.firstChild.textContent = "发送中";
+      statusText.innerHTML = `
+        正在思考中
+        <span class="dot-pulse">
+          <span></span><span></span><span></span>
+        </span>
+      `;
+    } else {
+      sendBtn.disabled = false;
+      sendBtn.firstChild.textContent = "发送";
+      statusText.textContent = "已就绪";
+    }
+  }
 
-  chat.innerHTML += `<div class="message bot">${data.reply}</div>`;
-}
+  function addMessage(role, content) {
+    const row = document.createElement("div");
+    row.className = "message-row " + role;
+
+    const avatar = document.createElement("div");
+    avatar.className = "avatar " + role;
+    avatar.textContent = role === "user" ? "你" : "DS";
+
+    const bubble = document.createElement("div");
+    bubble.className = "message-bubble " + role;
+    bubble.textContent = content;
+
+    const meta = document.createElement("div");
+    meta.className = "message-meta";
+    meta.textContent = new Date().toLocaleTimeString("zh-CN", {
+      hour: "2-digit",
+      minute: "2-digit"
+    });
+
+    bubble.appendChild(meta);
+
+    if (role === "bot") {
+      row.appendChild(avatar);
+      row.appendChild(bubble);
+    } else {
+      row.appendChild(bubble);
+      row.appendChild(avatar);
+    }
+
+    chatEl.appendChild(row);
+    chatEl.scrollTop = chatEl.scrollHeight;
+  }
+
+  async function sendMsg() {
+    const text = inputEl.value.trim();
+    if (!text || sendBtn.disabled) return;
+
+    addMessage("user", text);
+    inputEl.value = "";
+    setLoading(true);
+
+    try {
+      const res = await fetch("https://deepseek-speciale-chat.vercel.app/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: text })
+      });
+
+      let data;
+      try {
+        data = await res.json();
+      } catch (_) {
+        data = { error: "无法解析服务器返回的数据" };
+      }
+
+      if (!res.ok || data.error) {
+        const errText = data && data.error
+          ? `出错了：${data.error}`
+          : `出错了：HTTP ${res.status}`;
+        addMessage("bot", errText);
+      } else {
+        addMessage("bot", data.reply || "（模型没有返回内容）");
+      }
+    } catch (e) {
+      addMessage("bot", "网络错误或服务器不可用，请稍后重试。");
+      console.error(e);
+    } finally {
+      setLoading(false);
+      inputEl.focus();
+    }
+  }
 </script>
 </body>
 </html>
+
