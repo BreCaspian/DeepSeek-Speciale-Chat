@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>DeepSeek - Speciale Chat</title>
+
   <style>
     :root {
       --bg-color: #050508;
@@ -399,6 +400,9 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.7/dist/katex.min.css">
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.7/dist/katex.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.7/dist/contrib/auto-render.min.js"></script>
+
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github-dark.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/highlight.min.js"></script>
 </head>
 <body>
 
@@ -434,6 +438,11 @@
   </div>
 
   <script>
+    marked.setOptions({
+      gfm: true,
+      breaks: true
+    });
+
     function renderMarkdownToElement(el, text) {
       if (!text) {
         el.textContent = "";
@@ -442,6 +451,7 @@
       const html = marked.parse(text);
       const safeHtml = DOMPurify.sanitize(html);
       el.innerHTML = safeHtml;
+
       if (window.renderMathInElement) {
         renderMathInElement(el, {
           delimiters: [
@@ -450,6 +460,12 @@
             { left: "\\(", right: "\\)", display: false },
             { left: "\\[", right: "\\]", display: true }
           ]
+        });
+      }
+
+      if (window.hljs) {
+        el.querySelectorAll('pre code').forEach(block => {
+          hljs.highlightElement(block);
         });
       }
     }
@@ -491,6 +507,7 @@
     const sendBtn = document.getElementById('sendBtn');
 
     const history = [];
+    const MAX_RETRY = 2;
 
     let chatStarted = false;
     function ensureChatLayoutStarted() {
@@ -499,25 +516,7 @@
       document.body.classList.add('chat-started');
     }
 
-    function createReasoningBox(text) {
-      const details = document.createElement('details');
-      details.className = 'reasoning-box';
-
-      const summary = document.createElement('summary');
-      summary.textContent = 'Reasoning';
-      details.appendChild(summary);
-
-      const content = document.createElement('div');
-      content.className = 'reasoning-content';
-      content.textContent = text;
-      details.appendChild(content);
-
-      return details;
-    }
-
-    function appendMessage(role, text, options = {}) {
-      const { isThinking = false, reasoning = null } = options;
-
+    function createMessageBubble(role) {
       const row = document.createElement('div');
       row.className = `msg-row ${role}`;
 
@@ -541,26 +540,8 @@
 
       const body = document.createElement('div');
       body.className = 'msg-bubble-body';
-
-      const main = document.createElement('div');
-      main.className = 'msg-main';
-
-      if (isThinking) {
-        const span = document.createElement('span');
-        span.className = 'dots';
-        main.appendChild(span);
-      } else {
-        renderMarkdownToElement(main, text);
-      }
-
-      body.appendChild(main);
-
-      if (reasoning) {
-        const rb = createReasoningBox(reasoning);
-        body.appendChild(rb);
-      }
-
       bubble.appendChild(body);
+
       row.appendChild(bubble);
       chatWrapper.appendChild(row);
 
@@ -570,7 +551,148 @@
 
       chatWrapper.scrollTop = chatWrapper.scrollHeight;
 
-      return { row, bubble, body, main };
+      return { row, bubble, body };
+    }
+
+    function appendUserMessage(text) {
+      const { body } = createMessageBubble('user');
+      const main = document.createElement('div');
+      main.className = 'msg-main';
+      renderMarkdownToElement(main, text);
+      body.appendChild(main);
+    }
+
+    function createAssistantContainers() {
+      const { body } = createMessageBubble('bot');
+
+      const reasoningDetails = document.createElement('details');
+      reasoningDetails.className = 'reasoning-box';
+      reasoningDetails.open = true;
+
+      const summary = document.createElement('summary');
+      summary.textContent = 'Reasoning';
+      reasoningDetails.appendChild(summary);
+
+      const reasoningContent = document.createElement('div');
+      reasoningContent.className = 'reasoning-content';
+      reasoningDetails.appendChild(reasoningContent);
+
+      body.appendChild(reasoningDetails);
+
+      const finalMain = document.createElement('div');
+      finalMain.className = 'msg-main';
+      body.appendChild(finalMain);
+
+      return { reasoningDetails, reasoningContent, finalMain };
+    }
+
+    async function streamAssistantReply(userText, ui, retryCount) {
+      const { reasoningDetails, reasoningContent, finalMain } = ui;
+      let reasoningText = '';
+      let finalText = '';
+
+      try {
+        const res = await fetch(API_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            message: userText,
+            history,
+            stream: true
+          })
+        });
+
+        const contentType = (res.headers.get('Content-Type') || '').toLowerCase();
+
+        if (!res.ok) {
+          let errorText = `HTTP ${res.status}`;
+          try {
+            const errJson = await res.json();
+            if (errJson && (errJson.error || errJson.detail)) {
+              errorText = JSON.stringify(errJson);
+            }
+          } catch (_) {}
+          throw new Error(errorText);
+        }
+
+        if (contentType.includes('application/json')) {
+          const json = await res.json();
+          finalText = json.reply || json.content || "（无返回内容）";
+          renderMarkdownToElement(finalMain, finalText);
+          reasoningDetails.style.display = 'none';
+          history.push({ role: "assistant", content: finalText });
+          return;
+        }
+
+        if (!res.body) {
+          throw new Error("Empty response body");
+        }
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder('utf-8');
+        let buffer = '';
+
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+
+          const lines = buffer.split('\n');
+          buffer = lines.pop();
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith('data:')) continue;
+
+            const dataStr = trimmed.slice(5).trim();
+            if (!dataStr || dataStr === '[DONE]') continue;
+
+            let event;
+            try {
+              event = JSON.parse(dataStr);
+            } catch (_) {
+              continue;
+            }
+
+            if (event.type === 'reasoning') {
+              const delta = event.delta || event.content || '';
+              reasoningText += delta;
+              reasoningContent.textContent = reasoningText;
+              chatWrapper.scrollTop = chatWrapper.scrollHeight;
+            } else if (event.type === 'final') {
+              const delta = event.delta || event.content || '';
+              finalText += delta;
+              renderMarkdownToElement(finalMain, finalText);
+              chatWrapper.scrollTop = chatWrapper.scrollHeight;
+            } else if (event.type === 'error') {
+              const msg = event.message || 'API error';
+              throw new Error(msg);
+            }
+          }
+        }
+
+        if (!finalText && reasoningText) {
+          finalText = reasoningText;
+          renderMarkdownToElement(finalMain, finalText);
+        }
+
+        if (!reasoningText) {
+          reasoningDetails.style.display = 'none';
+        }
+
+        history.push({ role: "assistant", content: finalText || "（无返回内容）" });
+      } catch (err) {
+        if (retryCount < MAX_RETRY) {
+          reasoningDetails.style.display = '';
+          reasoningContent.textContent += `\n\n[连接中断，正在重试 ${retryCount + 1}/${MAX_RETRY}...]`;
+          chatWrapper.scrollTop = chatWrapper.scrollHeight;
+          await streamAssistantReply(userText, ui, retryCount + 1);
+          return;
+        }
+        reasoningDetails.style.display = '';
+        const msg = err && err.message ? err.message : String(err);
+        reasoningContent.textContent += `\n\n[多次重试失败：${msg}]`;
+      }
     }
 
     async function sendMessage() {
@@ -581,65 +703,24 @@
 
       ensureChatLayoutStarted();
 
-      history.push({ role: "user", content: text });
-
-      appendMessage('user', text);
-      const thinking = appendMessage('bot', '', { isThinking: true });
+      appendUserMessage(text);
 
       sendBtn.disabled = true;
 
-      try {
-        const res = await fetch(API_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            message: text,
-            history
-          })
-        });
+      const ui = createAssistantContainers();
 
-        let data = null;
-        try {
-          data = await res.json();
-        } catch (e) {
-          data = null;
-        }
+      history.push({ role: "user", content: text });
 
-        if (!res.ok) {
-          const msg =
-            (data && data.error) ||
-            (data && data.detail && JSON.stringify(data.detail)) ||
-            `HTTP ${res.status}`;
-          throw new Error(msg);
-        }
+      await streamAssistantReply(text, ui, 0);
 
-        const reply = (data && (data.reply || data.content)) || "（无返回内容）";
-        const reasoning = data && data.reasoning ? data.reasoning : null;
-
-        renderMarkdownToElement(thinking.main, reply);
-
-        history.push({ role: "assistant", content: reply });
-
-        if (reasoning) {
-          const rb = createReasoningBox(reasoning);
-          thinking.body.appendChild(rb);
-        }
-      } catch (err) {
-        const msg = typeof err.message === "string" ? err.message : String(err);
-        thinking.main.textContent = "请求出错了：" + msg;
-        console.error(err);
-      } finally {
-        sendBtn.disabled = false;
-        chatWrapper.scrollTop = chatWrapper.scrollHeight;
-      }
+      sendBtn.disabled = false;
+      chatWrapper.scrollTop = chatWrapper.scrollHeight;
     }
 
     inputEl.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        if (!e.shiftKey) {
-          e.preventDefault();
-          sendMessage();
-        }
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
       }
     });
 
@@ -656,4 +737,3 @@
   </script>
 </body>
 </html>
-
