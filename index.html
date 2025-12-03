@@ -598,13 +598,23 @@
           })
         });
 
-        if (!res.ok) {
-          throw new Error("Network error");
+        let data = null;
+        try {
+          data = await res.json();
+        } catch (e) {
+          data = null;
         }
 
-        const data = await res.json();
-        const reply = data.reply || data.content || "（无返回内容）";
-        const reasoning = data.reasoning || null;
+        if (!res.ok) {
+          const msg =
+            (data && data.error) ||
+            (data && data.detail && JSON.stringify(data.detail)) ||
+            `HTTP ${res.status}`;
+          throw new Error(msg);
+        }
+
+        const reply = (data && (data.reply || data.content)) || "（无返回内容）";
+        const reasoning = data && data.reasoning ? data.reasoning : null;
 
         renderMarkdownToElement(thinking.main, reply);
 
@@ -615,7 +625,8 @@
           thinking.body.appendChild(rb);
         }
       } catch (err) {
-        thinking.main.textContent = "请求出错了，请稍后重试。";
+        const msg = typeof err.message === "string" ? err.message : String(err);
+        thinking.main.textContent = "请求出错了：" + msg;
         console.error(err);
       } finally {
         sendBtn.disabled = false;
