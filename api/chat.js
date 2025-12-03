@@ -1,7 +1,5 @@
 // api/chat.js
 
-// 这个 handler 既兼容旧的 { message } 请求
-// 也支持新的 { message, history }，history 是完整对话历史
 export default async function handler(req, res) {
   // 只允许 POST
   if (req.method !== "POST") {
@@ -24,7 +22,7 @@ export default async function handler(req, res) {
     const data = JSON.parse(body || "{}");
     userMessage = data.message;
 
-    // 允许前端传 { history: [{role, content}, ...] }
+    // 可选：前端传来的 history（你以后想做多轮对话可以用）
     if (Array.isArray(data.history)) {
       history = data.history
         .filter(
@@ -33,8 +31,7 @@ export default async function handler(req, res) {
             typeof m.role === "string" &&
             typeof m.content === "string"
         )
-        // 避免上下文太长，这里只保留最近 20 条对话（不含 system）
-        .slice(-20);
+        .slice(-20); // 只保留最近 20 条，防止太长
     }
   } catch (e) {
     res.statusCode = 400;
@@ -58,22 +55,21 @@ export default async function handler(req, res) {
     return;
   }
 
-  // 组装要发给 DeepSeek 的 messages：
-  // system 提示 + 历史对话 + 当前用户消息
+  // 组装 DeepSeek messages
   const messages = [
     {
       role: "system",
       content:
         "You are DeepSeek-V3.2-Speciale, a helpful and rigorous assistant. " +
         "Always answer in the same language as the user. " +
-        "Keep your reasoning internal; only output clear final answers.",
+        "When appropriate, you may use step-by-step reasoning internally, " +
+        "but keep the final explanation clear and concise.",
     },
     ...history,
     { role: "user", content: userMessage },
   ];
 
   try {
-    // DeepSeek-V3.2-Speciale 的专用 base_url（你原来就是用的这个）
     const dsRes = await fetch(
       "https://api.deepseek.com/v3.2_speciale_expires_on_20251215/chat/completions",
       {
@@ -83,18 +79,18 @@ export default async function handler(req, res) {
           Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-          model: "deepseek-reasoner", // Speciale 只支持推理模型
+          model: "deepseek-reasoner",     // 推理模型
           messages,
           stream: false,
-          // 可选：限制输出长度，避免一不小心特别长
           max_output_tokens: 1024,
+          // 如将来需要额外控制，可以在这里加参数
+          // return_reasoning: true,
         }),
       }
     );
 
     const json = await dsRes.json();
 
-    // DeepSeek 可能在 body 里返回 { error: {...} }
     if (!dsRes.ok || json.error) {
       console.error("DeepSeek API error:", json);
       res.statusCode = dsRes.status || 500;
@@ -108,20 +104,21 @@ export default async function handler(req, res) {
       return;
     }
 
-    const choice = json.choices?.[0];
+    const choice = json.choices?.[0] || {};
+    const msg = choice.message || {};
 
-    // 最终展示的回答（只用 message.content，不展示 reasoning_content）
     const reply =
-      choice?.message?.content || "（DeepSeek 没有返回内容）";
+      msg.content || "（DeepSeek 没有返回内容）";
 
-    // 如果你以后想用思维过程，可以从 choice.reasoning_content 里取
+    // ⭐ 重点：拿到推理过程（可能为 undefined，没有就返回 null）
+    const reasoning = msg.reasoning_content || null;
 
     res.statusCode = 200;
     res.setHeader("Content-Type", "application/json");
     res.end(
       JSON.stringify({
         reply,
-        // 可选：把 usage 带回去，方便你将来做 token 统计
+        reasoning,        // 前端可选择展示 / 折叠
         usage: json.usage || null,
       })
     );
@@ -137,4 +134,3 @@ export default async function handler(req, res) {
     );
   }
 }
-
