@@ -1,18 +1,22 @@
 // api/chat.js
 
-res.setHeader("Access-Control-Allow-Origin", "*");
-res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
-
-// 处理 OPTIONS 请求
-if (req.method === "OPTIONS") {
-  res.statusCode = 204;
-  res.end();
-  return;
-}
-
 export default async function handler(req, res) {
-  // 只允许 POST
+  // ---------- CORS 处理 ----------
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization"
+  );
+
+  // 预检请求（浏览器发的 OPTIONS）
+  if (req.method === "OPTIONS") {
+    res.statusCode = 204;
+    res.end();
+    return;
+  }
+
+  // ---------- 只允许 POST ----------
   if (req.method !== "POST") {
     res.statusCode = 405;
     res.setHeader("Content-Type", "application/json");
@@ -20,7 +24,7 @@ export default async function handler(req, res) {
     return;
   }
 
-  // 读取请求体
+  // ---------- 读取请求体 ----------
   let body = "";
   for await (const chunk of req) {
     body += chunk;
@@ -33,7 +37,7 @@ export default async function handler(req, res) {
     const data = JSON.parse(body || "{}");
     userMessage = data.message;
 
-    // 可选：前端传来的 history（你以后想做多轮对话可以用）
+    // 可选：前端传来的 history
     if (Array.isArray(data.history)) {
       history = data.history
         .filter(
@@ -42,7 +46,7 @@ export default async function handler(req, res) {
             typeof m.role === "string" &&
             typeof m.content === "string"
         )
-        .slice(-20); // 只保留最近 20 条，防止太长
+        .slice(-20); // 只保留最近 20 条
     }
   } catch (e) {
     res.statusCode = 400;
@@ -58,15 +62,18 @@ export default async function handler(req, res) {
     return;
   }
 
+  // ---------- 读取 DeepSeek API Key ----------
   const apiKey = process.env.DEEPSEEK_API_KEY;
   if (!apiKey) {
     res.statusCode = 500;
     res.setHeader("Content-Type", "application/json");
-    res.end(JSON.stringify({ error: "Server misconfigured: no API key" }));
+    res.end(
+      JSON.stringify({ error: "Server misconfigured: no API key" })
+    );
     return;
   }
 
-  // 组装 DeepSeek messages
+  // ---------- 组装 messages ----------
   const messages = [
     {
       role: "system",
@@ -81,6 +88,7 @@ export default async function handler(req, res) {
   ];
 
   try {
+    // ---------- 调用 DeepSeek ----------
     const dsRes = await fetch(
       "https://api.deepseek.com/v3.2_speciale_expires_on_20251215/chat/completions",
       {
@@ -90,12 +98,11 @@ export default async function handler(req, res) {
           Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-          model: "deepseek-reasoner",     // 推理模型
+          model: "deepseek-reasoner",
           messages,
           stream: false,
           max_output_tokens: 1024,
-          // 如将来需要额外控制，可以在这里加参数
-          // return_reasoning: true,
+          // return_reasoning: true, // 以后想要推理内容可打开
         }),
       }
     );
@@ -118,18 +125,16 @@ export default async function handler(req, res) {
     const choice = json.choices?.[0] || {};
     const msg = choice.message || {};
 
-    const reply =
-      msg.content || "（DeepSeek 没有返回内容）";
-
-    // ⭐ 重点：拿到推理过程（可能为 undefined，没有就返回 null）
+    const reply = msg.content || "（DeepSeek 没有返回内容）";
     const reasoning = msg.reasoning_content || null;
 
+    // ---------- 返回给前端 ----------
     res.statusCode = 200;
     res.setHeader("Content-Type", "application/json");
     res.end(
       JSON.stringify({
         reply,
-        reasoning,        // 前端可选择展示 / 折叠
+        reasoning,
         usage: json.usage || null,
       })
     );
@@ -145,3 +150,4 @@ export default async function handler(req, res) {
     );
   }
 }
+
