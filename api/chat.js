@@ -90,7 +90,7 @@ export default async function handler(req, res) {
           Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-          model: "deepseek-reasoner",
+          model: "deepseek-chat",
           messages,
           stream: false,
           max_output_tokens: 8192,
