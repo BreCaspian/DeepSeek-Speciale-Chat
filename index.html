@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>DeepSeek - Speciale Chat</title>
   <style>
-    /* --- 1. 全局与基础设置 --- */
     :root {
       --bg-color: #050508;
       --input-bg: rgba(15, 15, 20, 0.35);
@@ -25,18 +24,16 @@
       overflow: hidden;
       display: flex;
       justify-content: center;
-      align-items: center; /* 初始整体垂直居中 */
+      align-items: center;
       position: relative;
       color: #fff;
       transition: align-items 0.5s ease;
     }
 
-    /* 聊天开始后：拉伸到顶部，让内部用 flex 布局控制“上消息、下输入框” */
     body.chat-started {
       align-items: stretch;
     }
 
-    /* --- 2. 背景星空系统 --- */
     .sky-container {
       position: absolute;
       inset: 0;
@@ -86,7 +83,6 @@
       100% { transform: translateX(-300px) translateY(300px) rotate(-45deg) scaleX(1); opacity: 0; }
     }
 
-    /* --- 3. 前端 UI 容器 --- */
     .ui-layer {
       position: relative;
       z-index: 10;
@@ -116,20 +112,18 @@
       text-align: center;
     }
 
-    /* DeepSeek 近白色，Speciale 浅蓝斜体 */
     .logo-main {
-      color: #e6f5ff;
+      color: #4b8dff;
       font-weight: 700;
     }
 
     .logo-sub {
-      font-style: italic;
+      font-style: normal;
       font-weight: 400;
-      color: #4b8dff;
+      color: #1f3fff;
       margin-left: 4px;
     }
 
-    /* --- 4. 聊天消息区（中间） --- */
     .chat-wrapper {
       width: 100%;
       margin-bottom: 0;
@@ -196,12 +190,46 @@
       border-bottom-left-radius: 4px;
     }
 
-    /* 模型名字：显示在机器人气泡左上角 */
-    .msg-model-tag {
+    .msg-bubble-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
       font-size: 10px;
-      opacity: 0.7;
-      font-style: italic;
+      opacity: 0.8;
       margin-bottom: 4px;
+    }
+
+    .msg-bubble-label {
+      font-weight: 500;
+    }
+
+    .msg-bubble-toggle {
+      border: none;
+      background: transparent;
+      color: inherit;
+      cursor: pointer;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      font-size: 10px;
+    }
+
+    .msg-bubble-toggle::before {
+      content: "▼";
+      display: inline-block;
+      transition: transform 0.2s ease;
+    }
+
+    .msg-bubble.collapsed .msg-bubble-toggle::before {
+      transform: rotate(-90deg);
+    }
+
+    .msg-bubble-body {
+      margin-top: 2px;
+    }
+
+    .msg-bubble.collapsed .msg-bubble-body {
+      display: none;
     }
 
     .msg-main {
@@ -209,7 +237,6 @@
       word-break: break-word;
     }
 
-    /* 推理内容折叠块 */
     .reasoning-box {
       margin-top: 8px;
       font-size: 12px;
@@ -233,7 +260,7 @@
     }
 
     .reasoning-box summary::after {
-      content: "▼";
+      content: "▶";
       font-size: 10px;
       margin-left: 6px;
       opacity: 0.8;
@@ -241,7 +268,7 @@
     }
 
     .reasoning-box[open] summary::after {
-      transform: rotate(-180deg);
+      content: "▼";
     }
 
     .reasoning-content {
@@ -252,7 +279,6 @@
       line-height: 1.5;
     }
 
-    /* --- 5. 输入区 --- */
     .search-box {
       width: 100%;
       background: var(--input-bg);
@@ -335,7 +361,6 @@
       transform: none;
     }
 
-    /* 输入框下方全局模型名称：居中 */
     .model-hint {
       margin-top: 10px;
       font-size: 12px;
@@ -344,7 +369,6 @@
       text-align: center;
     }
 
-    /* “思考中…” 动画 */
     .dots {
       display: inline-block;
       min-width: 18px;
@@ -363,40 +387,33 @@
     }
 
     @keyframes fadeIn { to { opacity: 1; } }
-    @keyframes slideUp { 
+    @keyframes slideUp {
       from { opacity: 0; transform: translateY(20px); }
       to { opacity: 1; transform: translateY(0); }
     }
   </style>
 
-  <!-- Markdown 解析 -->
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-  <!-- XSS 安全过滤 -->
   <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.5/dist/purify.min.js"></script>
 
-  <!-- KaTeX 数学公式 -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.7/dist/katex.min.css">
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.7/dist/katex.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.7/dist/contrib/auto-render.min.js"></script>
 </head>
 <body>
 
-  <!-- 背景星空 -->
   <div class="sky-container" id="sky">
     <div class="stars-rotate" id="starsRotate"></div>
   </div>
 
-  <!-- 前景 UI：Logo + 聊天区 + 输入框 -->
   <div class="ui-layer">
     <div class="logo">
       <span class="logo-main">DeepSeek</span>
       <span class="logo-sub">Speciale</span>
     </div>
 
-    <!-- 聊天内容区（中间） -->
     <div class="chat-wrapper" id="chatWrapper"></div>
 
-    <!-- 输入区（底部） -->
     <div class="search-box">
       <textarea
         id="promptInput"
@@ -404,8 +421,7 @@
         rows="1"
         placeholder="Ask anything..."
       ></textarea>
-      <button class="search-btn" id="sendBtn" title="发送">
-        <!-- 纸飞机简笔画图标 -->
+      <button class="search-btn" id="sendBtn" title="Send">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <line x1="22" y1="2" x2="11" y2="13"></line>
@@ -414,28 +430,18 @@
       </button>
     </div>
 
-    <!-- 输入框下方、全局模型名称：居中 -->
     <div class="model-hint">DeepSeek-V3.2-Speciale</div>
   </div>
 
   <script>
-    // ========= Markdown + LaTeX 渲染工具 =========
     function renderMarkdownToElement(el, text) {
       if (!text) {
         el.textContent = "";
         return;
       }
-
-      // Markdown -> HTML
       const html = marked.parse(text);
-
-      // XSS 过滤
       const safeHtml = DOMPurify.sanitize(html);
-
-      // 塞进 DOM
       el.innerHTML = safeHtml;
-
-      // 渲染数学公式（如果 KaTeX 已加载）
       if (window.renderMathInElement) {
         renderMathInElement(el, {
           delimiters: [
@@ -448,7 +454,6 @@
       }
     }
 
-    /* ========= 1. 旋转星空 ========= */
     const starsRotate = document.getElementById('starsRotate');
     const bgStarCount = 150;
 
@@ -467,7 +472,6 @@
       }
     }
 
-    /* ========= 2. 流星 ========= */
     function spawnShootingStar() {
       const sky = document.getElementById('sky');
       const star = document.createElement('div');
@@ -477,11 +481,8 @@
       star.style.width = (Math.random() * 100 + 50) + 'px';
       sky.appendChild(star);
       setTimeout(() => star.remove(), 2500);
-
       setTimeout(spawnShootingStar, Math.random() * 4000 + 2000);
     }
-
-    /* ========= 3. 聊天逻辑 ========= */
 
     const API_URL = "https://deepseek-speciale-chat.vercel.app/api/chat";
 
@@ -489,7 +490,6 @@
     const inputEl = document.getElementById('promptInput');
     const sendBtn = document.getElementById('sendBtn');
 
-    // （可选）如果想要多轮对话，可以维护一个 history 数组，并在发送时带给后端
     const history = [];
 
     let chatStarted = false;
@@ -504,12 +504,12 @@
       details.className = 'reasoning-box';
 
       const summary = document.createElement('summary');
-      summary.textContent = '查看推理过程';
+      summary.textContent = 'Reasoning';
       details.appendChild(summary);
 
       const content = document.createElement('div');
       content.className = 'reasoning-content';
-      content.textContent = text; // 推理内容一般纯文本，保留 textContent 即可
+      content.textContent = text;
       details.appendChild(content);
 
       return details;
@@ -524,12 +524,23 @@
       const bubble = document.createElement('div');
       bubble.className = 'msg-bubble';
 
-      if (role === 'bot') {
-        const tag = document.createElement('div');
-        tag.className = 'msg-model-tag';
-        tag.textContent = 'DeepSeek-V3.2-Speciale';
-        bubble.appendChild(tag);
-      }
+      const header = document.createElement('div');
+      header.className = 'msg-bubble-header';
+
+      const label = document.createElement('span');
+      label.className = 'msg-bubble-label';
+      label.textContent = role === 'bot' ? 'DeepSeek-V3.2-Speciale' : 'You';
+      header.appendChild(label);
+
+      const toggleBtn = document.createElement('button');
+      toggleBtn.type = 'button';
+      toggleBtn.className = 'msg-bubble-toggle';
+      header.appendChild(toggleBtn);
+
+      bubble.appendChild(header);
+
+      const body = document.createElement('div');
+      body.className = 'msg-bubble-body';
 
       const main = document.createElement('div');
       main.className = 'msg-main';
@@ -539,24 +550,27 @@
         span.className = 'dots';
         main.appendChild(span);
       } else {
-        // 用 Markdown + LaTeX 渲染内容（用户和机器人统一处理）
         renderMarkdownToElement(main, text);
       }
 
-      bubble.appendChild(main);
+      body.appendChild(main);
 
-      // 如果有推理内容，默认折叠
       if (reasoning) {
         const rb = createReasoningBox(reasoning);
-        bubble.appendChild(rb);
+        body.appendChild(rb);
       }
 
+      bubble.appendChild(body);
       row.appendChild(bubble);
       chatWrapper.appendChild(row);
 
+      toggleBtn.addEventListener('click', () => {
+        bubble.classList.toggle('collapsed');
+      });
+
       chatWrapper.scrollTop = chatWrapper.scrollHeight;
 
-      return { row, bubble, main };
+      return { row, bubble, body, main };
     }
 
     async function sendMessage() {
@@ -567,7 +581,6 @@
 
       ensureChatLayoutStarted();
 
-      // 前端自己维护一份 history（只存 content，推理不存）
       history.push({ role: "user", content: text });
 
       appendMessage('user', text);
@@ -581,7 +594,7 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             message: text,
-            history, // 传给后端（可选）
+            history
           })
         });
 
@@ -593,16 +606,13 @@
         const reply = data.reply || data.content || "（无返回内容）";
         const reasoning = data.reasoning || null;
 
-        // 更新机器人最后一块内容（Markdown 渲染）
         renderMarkdownToElement(thinking.main, reply);
 
-        // 把最新一轮 assistant 内容也塞进 history
         history.push({ role: "assistant", content: reply });
 
-        // 如有推理内容，追加一个可折叠块
         if (reasoning) {
           const rb = createReasoningBox(reasoning);
-          thinking.bubble.appendChild(rb);
+          thinking.body.appendChild(rb);
         }
       } catch (err) {
         thinking.main.textContent = "请求出错了，请稍后重试。";
@@ -613,7 +623,6 @@
       }
     }
 
-    // 输入框：Enter 发送，Shift+Enter 换行
     inputEl.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
         if (!e.shiftKey) {
@@ -625,16 +634,15 @@
 
     sendBtn.addEventListener('click', sendMessage);
 
-    // 文本域高度自适应
     function autoResizeTextarea() {
       inputEl.style.height = 'auto';
       inputEl.style.height = Math.min(inputEl.scrollHeight, 120) + 'px';
     }
     inputEl.addEventListener('input', autoResizeTextarea);
 
-    /* ========= 4. 初始化 ========= */
     initSky();
     spawnShootingStar();
   </script>
 </body>
 </html>
+
