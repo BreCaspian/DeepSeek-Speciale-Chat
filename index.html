@@ -204,6 +204,54 @@
       margin-bottom: 4px;
     }
 
+    .msg-main {
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    /* 推理内容折叠块 */
+    .reasoning-box {
+      margin-top: 8px;
+      font-size: 12px;
+      background: rgba(255,255,255,0.03);
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,0.08);
+      padding: 6px 10px 8px;
+    }
+
+    .reasoning-box summary {
+      cursor: pointer;
+      list-style: none;
+      outline: none;
+      user-select: none;
+      font-weight: 500;
+      color: rgba(200,220,255,0.9);
+    }
+
+    .reasoning-box summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .reasoning-box summary::after {
+      content: "▼";
+      font-size: 10px;
+      margin-left: 6px;
+      opacity: 0.8;
+      transition: transform 0.2s ease;
+    }
+
+    .reasoning-box[open] summary::after {
+      transform: rotate(-180deg);
+    }
+
+    .reasoning-content {
+      margin-top: 4px;
+      color: rgba(220, 230, 255, 0.9);
+      white-space: pre-wrap;
+      word-break: break-word;
+      line-height: 1.5;
+    }
+
     /* --- 5. 输入区 --- */
     .search-box {
       width: 100%;
@@ -315,7 +363,7 @@
     }
 
     @keyframes fadeIn { to { opacity: 1; } }
-    @keyframes slideUp {
+    @keyframes slideUp { 
       from { opacity: 0; transform: translateY(20px); }
       to { opacity: 1; transform: translateY(0); }
     }
@@ -402,7 +450,7 @@
     const inputEl = document.getElementById('promptInput');
     const sendBtn = document.getElementById('sendBtn');
 
-    // 用于发给后端的对话历史
+    // （可选）如果想要多轮对话，可以维护一个 history 数组，并在发送时带给后端
     const history = [];
 
     let chatStarted = false;
@@ -412,14 +460,31 @@
       document.body.classList.add('chat-started');
     }
 
-    function appendMessage(role, text, isThinking = false) {
+    function createReasoningBox(text) {
+      const details = document.createElement('details');
+      details.className = 'reasoning-box';
+
+      const summary = document.createElement('summary');
+      summary.textContent = '查看推理过程';
+      details.appendChild(summary);
+
+      const content = document.createElement('div');
+      content.className = 'reasoning-content';
+      content.textContent = text;
+      details.appendChild(content);
+
+      return details;
+    }
+
+    function appendMessage(role, text, options = {}) {
+      const { isThinking = false, reasoning = null } = options;
+
       const row = document.createElement('div');
       row.className = `msg-row ${role}`;
 
       const bubble = document.createElement('div');
       bubble.className = 'msg-bubble';
 
-      // 机器人消息：左上角模型名
       if (role === 'bot') {
         const tag = document.createElement('div');
         tag.className = 'msg-model-tag';
@@ -427,24 +492,31 @@
         bubble.appendChild(tag);
       }
 
-      const content = document.createElement('div');
+      const main = document.createElement('div');
+      main.className = 'msg-main';
 
       if (isThinking) {
         const span = document.createElement('span');
         span.className = 'dots';
-        content.appendChild(span);
+        main.appendChild(span);
       } else {
-        content.textContent = text;
+        main.textContent = text;
       }
 
-      bubble.appendChild(content);
+      bubble.appendChild(main);
+
+      // 如果有推理内容，默认折叠
+      if (reasoning) {
+        const rb = createReasoningBox(reasoning);
+        bubble.appendChild(rb);
+      }
 
       row.appendChild(bubble);
       chatWrapper.appendChild(row);
 
       chatWrapper.scrollTop = chatWrapper.scrollHeight;
 
-      return { row, bubble };
+      return { row, bubble, main };
     }
 
     async function sendMessage() {
@@ -455,12 +527,11 @@
 
       ensureChatLayoutStarted();
 
-      // 显示用户消息 + 记录到历史
-      appendMessage('user', text);
+      // 前端自己维护一份 history（只存 content，推理不存）
       history.push({ role: "user", content: text });
 
-      // 显示“思考中”占位
-      const thinking = appendMessage('bot', '', true);
+      appendMessage('user', text);
+      const thinking = appendMessage('bot', '', { isThinking: true });
 
       sendBtn.disabled = true;
 
@@ -470,7 +541,7 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             message: text,
-            history, // 把完整历史发给后端
+            history, // 传给后端（可选）
           })
         });
 
@@ -479,17 +550,22 @@
         }
 
         const data = await res.json();
-        const reply = data.reply || data.content || JSON.stringify(data);
+        const reply = data.reply || data.content || "（无返回内容）";
+        const reasoning = data.reasoning || null;
 
         // 更新机器人最后一块内容
-        thinking.bubble.querySelector('div:last-child').textContent = reply;
+        thinking.main.textContent = reply;
 
-        // 把这次回复加入历史
+        // 把最新一轮 assistant 内容也塞进 history
         history.push({ role: "assistant", content: reply });
+
+        // 如有推理内容，追加一个可折叠块
+        if (reasoning) {
+          const rb = createReasoningBox(reasoning);
+          thinking.bubble.appendChild(rb);
+        }
       } catch (err) {
-        const errMsg = "请求出错了，请稍后重试。";
-        thinking.bubble.querySelector('div:last-child').textContent = errMsg;
-        history.push({ role: "assistant", content: errMsg });
+        thinking.main.textContent = "请求出错了，请稍后重试。";
         console.error(err);
       } finally {
         sendBtn.disabled = false;
