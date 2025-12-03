@@ -1,7 +1,6 @@
 // api/chat.js
 
 export default async function handler(req, res) {
-  // ---------- CORS 处理 ----------
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader(
@@ -9,14 +8,12 @@ export default async function handler(req, res) {
     "Content-Type, Authorization"
   );
 
-  // 预检请求（浏览器发的 OPTIONS）
   if (req.method === "OPTIONS") {
     res.statusCode = 204;
     res.end();
     return;
   }
 
-  // ---------- 只允许 POST ----------
   if (req.method !== "POST") {
     res.statusCode = 405;
     res.setHeader("Content-Type", "application/json");
@@ -24,7 +21,6 @@ export default async function handler(req, res) {
     return;
   }
 
-  // ---------- 读取请求体 ----------
   let body = "";
   for await (const chunk of req) {
     body += chunk;
@@ -37,7 +33,6 @@ export default async function handler(req, res) {
     const data = JSON.parse(body || "{}");
     userMessage = data.message;
 
-    // 可选：前端传来的 history
     if (Array.isArray(data.history)) {
       history = data.history
         .filter(
@@ -46,7 +41,7 @@ export default async function handler(req, res) {
             typeof m.role === "string" &&
             typeof m.content === "string"
         )
-        .slice(-20); // 只保留最近 20 条
+        .slice(-20);
     }
   } catch (e) {
     res.statusCode = 400;
@@ -62,7 +57,6 @@ export default async function handler(req, res) {
     return;
   }
 
-  // ---------- 读取 DeepSeek API Key ----------
   const apiKey = process.env.DEEPSEEK_API_KEY;
   if (!apiKey) {
     res.statusCode = 500;
@@ -73,7 +67,6 @@ export default async function handler(req, res) {
     return;
   }
 
-  // ---------- 组装 messages ----------
   const messages = [
     {
       role: "system",
@@ -88,7 +81,6 @@ export default async function handler(req, res) {
   ];
 
   try {
-    // ---------- 调用 DeepSeek ----------
     const dsRes = await fetch(
       "https://api.deepseek.com/v3.2_speciale_expires_on_20251215/chat/completions",
       {
@@ -101,8 +93,9 @@ export default async function handler(req, res) {
           model: "deepseek-reasoner",
           messages,
           stream: false,
-          max_output_tokens: 1024,
-          // return_reasoning: true, // 以后想要推理内容可打开
+          max_output_tokens: 8192,
+          temperature: 0.2,
+          top_p: 0.95,
         }),
       }
     );
@@ -128,7 +121,6 @@ export default async function handler(req, res) {
     const reply = msg.content || "（DeepSeek 没有返回内容）";
     const reasoning = msg.reasoning_content || null;
 
-    // ---------- 返回给前端 ----------
     res.statusCode = 200;
     res.setHeader("Content-Type", "application/json");
     res.end(
