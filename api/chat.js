@@ -91,7 +91,7 @@ export default async function handler(req, res) {
           model: "deepseek-chat",
           messages,
           stream: false,
-          max_output_tokens: 2048,
+          max_output_tokens: 8192,
           temperature: 0.2,
           top_p: 0.95,
         }),
