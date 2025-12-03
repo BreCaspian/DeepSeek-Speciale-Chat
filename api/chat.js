@@ -1,150 +1,120 @@
-export default async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader(
-    "Access-Control-Allow-Headers",
-    "Content-Type, Authorization"
-  );
+export const config = {
+  runtime: "edge",
+};
 
-  if (req.method === "OPTIONS") {
-    res.statusCode = 204;
-    res.end();
-    return;
-  }
-
-  if (req.method !== "POST") {
-    res.statusCode = 405;
-    res.setHeader("Content-Type", "application/json");
-    res.end(JSON.stringify({ error: "Method not allowed" }));
-    return;
-  }
-
-  let body = "";
-  for await (const chunk of req) {
-    body += chunk;
-  }
-
-  let userMessage;
-  let history = [];
-
-  try {
-    const data = JSON.parse(body || "{}");
-    userMessage = data.message;
-
-    if (Array.isArray(data.history)) {
-      history = data.history
-        .filter(
-          (m) =>
-            m &&
-            typeof m.role === "string" &&
-            typeof m.content === "string"
-        )
-        .slice(-8);
-    }
-  } catch (e) {
-    res.statusCode = 400;
-    res.setHeader("Content-Type", "application/json");
-    res.end(JSON.stringify({ error: "Invalid JSON body" }));
-    return;
-  }
-
-  if (!userMessage) {
-    res.statusCode = 400;
-    res.setHeader("Content-Type", "application/json");
-    res.end(JSON.stringify({ error: "Missing 'message' field" }));
-    return;
-  }
+export default async function handler(req) {
+  const { message, history = [] } = await req.json();
 
   const apiKey = process.env.DEEPSEEK_API_KEY;
   if (!apiKey) {
-    res.statusCode = 500;
-    res.setHeader("Content-Type", "application/json");
-    res.end(
-      JSON.stringify({ error: "Server misconfigured: no API key" })
-    );
-    return;
+    return new Response("Missing API key", { status: 500 });
   }
 
   const messages = [
     {
       role: "system",
       content:
-        "You are DeepSeek-V3.2-Speciale, a helpful and rigorous assistant. " +
-        "Always answer in the same language as the user. " +
-        "When appropriate, you may use step-by-step reasoning internally, " +
-        "but keep the final explanation clear and concise.",
+        "You are DeepSeek-V3.2-Speciale. Always reply in the user's language. You may output reasoning.",
     },
     ...history,
-    { role: "user", content: userMessage },
+    { role: "user", content: message },
   ];
 
-  try {
-    const dsRes = await fetch(
-      "https://api.deepseek.com/v3.2_speciale_expires_on_20251215/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: "deepseek-chat",
-          messages,
-          stream: false,
-          max_output_tokens: 8192,
-          temperature: 0.2,
-          top_p: 0.95,
-        }),
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    async start(controller) {
+      const send = (data) => {
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+      };
+
+      try {
+        const response = await fetch(
+          "https://api.deepseek.com/v3.2_speciale_expires_on_20251215/chat/completions",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${apiKey}`,
+            },
+            body: JSON.stringify({
+              model: "deepseek-reasoner",
+              messages,
+              stream: true,
+              max_output_tokens: 8192,
+            }),
+          }
+        );
+
+        if (!response.ok || !response.body) {
+          send({ error: "DeepSeek API error" });
+          controller.close();
+          return;
+        }
+
+        const reader = response.body.getReader();
+        let buffer = "";
+
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+
+          buffer += new TextDecoder().decode(value);
+
+          const parts = buffer.split("\n");
+          buffer = parts.pop();
+
+          for (const line of parts) {
+            if (!line.startsWith("data:")) continue;
+
+            const payload = line.replace("data:", "").trim();
+            if (payload === "[DONE]") {
+              controller.close();
+              return;
+            }
+
+            try {
+              const json = JSON.parse(payload);
+
+              const delta = json.choices?.[0]?.delta;
+              if (!delta) continue;
+
+              if (delta.reasoning_content) {
+                send({
+                  type: "reasoning",
+                  text: delta.reasoning_content,
+                });
+              }
+
+              if (delta.content) {
+                send({
+                  type: "final",
+                  text: delta.content,
+                });
+              }
+            } catch (e) {
+              continue;
+            }
+          }
+        }
+
+        controller.close();
+      } catch (err) {
+        controller.enqueue(
+          encoder.encode(
+            `data: ${JSON.stringify({ error: err.message })}\n\n`
+          )
+        );
+        controller.close();
       }
-    );
+    },
+  });
 
-    let json;
-    try {
-      json = await dsRes.json();
-    } catch (e) {
-      json = null;
-    }
-
-    if (!dsRes.ok || (json && json.error)) {
-      console.error("DeepSeek API error:", json);
-      res.statusCode = dsRes.status || 500;
-      res.setHeader("Content-Type", "application/json");
-      res.end(
-        JSON.stringify({
-          error: "DeepSeek API error",
-          detail: json,
-        })
-      );
-      return;
-    }
-
-    const choice = json && Array.isArray(json.choices) && json.choices[0]
-      ? json.choices[0]
-      : {};
-    const msg = choice.message || {};
-
-    const reply = msg.content || "（DeepSeek 没有返回内容）";
-    const reasoning = msg.reasoning_content || null;
-
-    res.statusCode = 200;
-    res.setHeader("Content-Type", "application/json");
-    res.end(
-      JSON.stringify({
-        reply,
-        reasoning,
-        usage: json.usage || null,
-      })
-    );
-  } catch (err) {
-    console.error("Server error calling DeepSeek:", err);
-    res.statusCode = 500;
-    res.setHeader("Content-Type", "application/json");
-    res.end(
-      JSON.stringify({
-        error: "Server error",
-        detail: String(err),
-      })
-    );
-  }
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+      "Access-Control-Allow-Origin": "*",
+    },
+  });
 }
-
