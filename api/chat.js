@@ -1,5 +1,16 @@
 // api/chat.js
 
+res.setHeader("Access-Control-Allow-Origin", "*");
+res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+
+// 处理 OPTIONS 请求
+if (req.method === "OPTIONS") {
+  res.statusCode = 204;
+  res.end();
+  return;
+}
+
 export default async function handler(req, res) {
   // 只允许 POST
   if (req.method !== "POST") {
