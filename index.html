@@ -3,430 +3,507 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>DeepSeek-Speciale Chat</title>
+  <title>DeepSeek - Speciale Chat</title>
   <style>
+    /* --- 1. 全局与基础设置 --- */
+    :root {
+      --bg-color: #050508;
+      --input-bg: rgba(15, 15, 20, 0.35);
+      --user-bubble: rgba(125, 249, 255, 0.14);
+      --bot-bubble: rgba(15, 15, 20, 0.78);
+    }
+
     * {
       box-sizing: border-box;
     }
 
     body {
       margin: 0;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #0f172a;
-      color: #0f172a;
+      height: 100vh;
+      background: radial-gradient(circle at 50% 120%, #1a2a3a 0%, #000000 70%);
+      font-family: "Inter", -apple-system, sans-serif;
+      overflow: hidden;
       display: flex;
       justify-content: center;
+      align-items: center; /* 初始整体垂直居中 */
+      position: relative;
+      color: #fff;
+      transition: align-items 0.5s ease;
+    }
+
+    /* 聊天开始后：拉伸到顶部，让内部用 flex 布局控制“上消息、下输入框” */
+    body.chat-started {
       align-items: stretch;
-      min-height: 100vh;
     }
 
-    .app {
-      flex: 1;
-      display: flex;
-      justify-content: center;
-      padding: 16px;
-    }
-
-    .chat-container {
-      background: #f9fafb;
-      width: 100%;
-      max-width: 900px;
-      border-radius: 16px;
-      box-shadow: 0 20px 40px rgba(15, 23, 42, 0.4);
-      display: flex;
-      flex-direction: column;
+    /* --- 2. 背景星空系统 --- */
+    .sky-container {
+      position: absolute;
+      inset: 0;
+      perspective: 1000px;
+      z-index: 0;
+      pointer-events: none;
       overflow: hidden;
     }
 
-    .chat-header {
-      padding: 16px 20px;
-      border-bottom: 1px solid #e5e7eb;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      background: linear-gradient(to right, #0f172a, #1f2937);
-      color: #f9fafb;
+    .stars-rotate {
+      position: absolute;
+      inset: -10vh;
+      transform-origin: 50% 50%;
+      animation: sky-rotate 240s linear infinite;
     }
 
-    .chat-header-left {
-      display: flex;
-      align-items: center;
-      gap: 10px;
+    .star {
+      position: absolute;
+      border-radius: 50%;
+      background: white;
+      opacity: 0;
+      animation: twinkle var(--dur) ease-in-out infinite;
+      animation-delay: var(--del);
     }
 
-    .chat-title {
-      font-size: 18px;
+    @keyframes twinkle {
+      0%, 100% { opacity: 0.2; transform: scale(0.8); }
+      50% { opacity: 0.9; transform: scale(1.2); box-shadow: 0 0 4px rgba(255, 255, 255, 0.8); }
+    }
+
+    @keyframes sky-rotate {
+      from { transform: rotate(0deg) scale(1.05); }
+      to   { transform: rotate(360deg) scale(1.05); }
+    }
+
+    .shooting-star {
+      position: absolute;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, white, transparent);
+      animation: shoot 2s linear forwards;
+      opacity: 0;
+    }
+
+    @keyframes shoot {
+      0% { transform: translateX(0) translateY(0) rotate(-45deg) scaleX(0.5); opacity: 0; }
+      10% { opacity: 1; transform: translateX(-20px) translateY(20px) rotate(-45deg) scaleX(1); }
+      100% { transform: translateX(-300px) translateY(300px) rotate(-45deg) scaleX(1); opacity: 0; }
+    }
+
+    /* --- 3. 前端 UI 容器 --- */
+    .ui-layer {
+      position: relative;
+      z-index: 10;
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      width: 100%;
+      max-width: 900px;
+      padding: 24px;
+      transition: padding 0.5s ease, height 0.5s ease;
+    }
+
+    body.chat-started .ui-layer {
+      height: 100vh;
+      padding-top: 32px;
+      padding-bottom: 16px;
+    }
+
+    .logo {
+      font-size: 2.6rem;
+      font-weight: 600;
+      letter-spacing: -1px;
+      margin-bottom: 2.4rem;
+      text-shadow: 0 0 20px rgba(0,0,0,0.5);
+      opacity: 0;
+      animation: fadeIn 1.2s ease-out forwards;
+      text-align: center;
+    }
+
+    /* DeepSeek 近白色，Speciale 浅蓝斜体 */
+    .logo-main {
+      color: #e6f5ff;
       font-weight: 700;
     }
 
-    .model-badge {
-      font-size: 12px;
-      padding: 3px 8px;
-      border-radius: 999px;
-      border: 1px solid rgba(148, 163, 184, 0.7);
-      color: #e5e7eb;
+    .logo-sub {
+      font-style: italic;
+      font-weight: 400;
+      color: #4b8dff;
+      margin-left: 4px;
     }
 
-    .chat-header-right {
-      font-size: 12px;
-      color: #cbd5f5;
-      opacity: 0.9;
+    /* --- 4. 聊天消息区（中间） --- */
+    .chat-wrapper {
+      width: 100%;
+      margin-bottom: 0;
+      max-height: 0;
+      overflow-y: hidden;
+      padding-right: 4px;
+      display: none;
+      opacity: 0;
+      transform: translateY(10px);
+      transition: opacity 0.4s ease, transform 0.4s ease, max-height 0.4s ease;
     }
 
-    .chat-main {
+    body.chat-started .chat-wrapper {
+      display: block;
       flex: 1;
-      padding: 16px 20px;
+      opacity: 1;
+      transform: translateY(0);
+      max-height: none;
       overflow-y: auto;
-      background: radial-gradient(circle at top, #e5e7eb 0, #f9fafb 40%, #e5e7eb 100%);
+      margin: 16px 0;
     }
 
-    .message-row {
+    .chat-wrapper::-webkit-scrollbar {
+      width: 6px;
+    }
+    .chat-wrapper::-webkit-scrollbar-thumb {
+      background: rgba(255,255,255,0.18);
+      border-radius: 999px;
+    }
+
+    .msg-row {
       display: flex;
       margin-bottom: 12px;
     }
 
-    .message-row.user {
+    .msg-row.user {
       justify-content: flex-end;
     }
+    .msg-row.bot {
+      justify-content: flex-start;
+    }
 
-    .message-bubble {
-      max-width: min(80%, 620px);
-      padding: 10px 12px;
-      border-radius: 16px;
-      word-break: break-word;
+    .msg-bubble {
+      max-width: 75%;
+      padding: 10px 14px;
+      border-radius: 18px;
       font-size: 14px;
-      line-height: 1.5;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      word-break: break-word;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.35);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
       position: relative;
     }
 
-    .message-meta {
-      font-size: 11px;
-      color: #9ca3af;
-      margin-top: 4px;
-      text-align: right;
-    }
-
-    .message-row.bot .message-meta {
-      text-align: left;
-    }
-
-    .message-bubble.user {
-      background: #2563eb;
-      color: #f9fafb;
+    .msg-row.user .msg-bubble {
+      background: var(--user-bubble);
       border-bottom-right-radius: 4px;
     }
 
-    .message-bubble.bot {
-      background: #ffffff;
-      border: 1px solid #e5e7eb;
+    .msg-row.bot .msg-bubble {
+      background: var(--bot-bubble);
       border-bottom-left-radius: 4px;
     }
 
-    .avatar {
-      width: 30px;
-      height: 30px;
+    /* 模型名字：显示在机器人气泡左上角 */
+    .msg-model-tag {
+      font-size: 10px;
+      opacity: 0.7;
+      font-style: italic;
+      margin-bottom: 4px;
+    }
+
+    /* --- 5. 输入区 --- */
+    .search-box {
+      width: 100%;
+      background: var(--input-bg);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255,255,255,0.18);
+      border-radius: 24px;
+      padding: 6px;
+      display: flex;
+      align-items: center;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+      transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+      opacity: 0;
+      animation: slideUp 1s ease-out 0.3s forwards;
+      margin-top: 0;
+    }
+
+    body.chat-started .search-box {
+      margin-top: 8px;
+    }
+
+    .search-box:focus-within {
+      background: rgba(25, 25, 35, 0.6);
+      border-color: rgba(125, 249, 255, 0.35);
+      box-shadow: 0 15px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(125, 249, 255, 0.18);
+      transform: scale(1.02);
+    }
+
+    .search-input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      color: white;
+      font-size: 16px;
+      padding: 12px 16px;
+      outline: none;
+      font-weight: 300;
+      resize: none;
+      line-height: 1.5;
+      max-height: 120px;
+      overflow-y: auto;
+    }
+
+    .search-input::placeholder {
+      color: rgba(220,220,230,0.55);
+    }
+
+    .search-input::-webkit-scrollbar {
+      width: 4px;
+    }
+    .search-input::-webkit-scrollbar-thumb {
+      background: rgba(255,255,255,0.2);
       border-radius: 999px;
+    }
+
+    .search-btn {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.12);
+      border: none;
+      color: white;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 14px;
-      margin-right: 8px;
+      cursor: pointer;
+      transition: 0.2s;
       flex-shrink: 0;
     }
 
-    .message-row.user .avatar {
-      margin-right: 0;
-      margin-left: 8px;
+    .search-btn:hover {
+      background: white;
+      color: #000;
+      transform: translateY(-1px) scale(1.05) rotate(6deg);
     }
 
-    .avatar.bot {
-      background: #0f172a;
-      color: #e5e7eb;
-      font-weight: 700;
-    }
-
-    .avatar.user {
-      background: #dbeafe;
-      color: #1d4ed8;
-      font-weight: 600;
-    }
-
-    .chat-footer {
-      border-top: 1px solid #e5e7eb;
-      padding: 10px 16px 14px;
-      background: #f3f4f6;
-    }
-
-    .input-row {
-      display: flex;
-      gap: 8px;
-      align-items: flex-end;
-    }
-
-    .input-row textarea {
-      flex: 1;
-      resize: none;
-      min-height: 40px;
-      max-height: 120px;
-      padding: 8px 10px;
-      border-radius: 10px;
-      border: 1px solid #d1d5db;
-      font-size: 14px;
-      font-family: inherit;
-      outline: none;
-      transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
-      background: #ffffff;
-    }
-
-    .input-row textarea:focus {
-      border-color: #2563eb;
-      box-shadow: 0 0 0 1px #2563eb33;
-      background: #ffffff;
-    }
-
-    .send-btn {
-      padding: 9px 16px;
-      border-radius: 999px;
-      border: none;
-      background: #2563eb;
-      color: #f9fafb;
-      font-size: 14px;
-      font-weight: 600;
-      cursor: pointer;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      box-shadow: 0 4px 10px rgba(37, 99, 235, 0.4);
-      white-space: nowrap;
-      transition: background 0.15s, transform 0.05s, box-shadow 0.15s, opacity 0.15s;
-    }
-
-    .send-btn:hover {
-      background: #1d4ed8;
-      box-shadow: 0 6px 16px rgba(37, 99, 235, 0.6);
-      transform: translateY(-1px);
-    }
-
-    .send-btn:active {
-      transform: translateY(0);
-      box-shadow: 0 3px 8px rgba(37, 99, 235, 0.4);
-    }
-
-    .send-btn:disabled {
-      opacity: 0.6;
+    .search-btn:disabled {
+      opacity: 0.5;
       cursor: default;
       transform: none;
-      box-shadow: none;
     }
 
-    .hint-row {
-      margin-top: 6px;
-      font-size: 11px;
-      color: #9ca3af;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
+    /* 输入框下方全局模型名称：居中 */
+    .model-hint {
+      margin-top: 10px;
+      font-size: 12px;
+      font-style: italic;
+      opacity: 0.7;
+      text-align: center;
     }
 
-    .status {
-      font-size: 11px;
-      color: #6b7280;
-      display: flex;
-      align-items: center;
-      gap: 4px;
+    /* “思考中…” 动画 */
+    .dots {
+      display: inline-block;
+      min-width: 18px;
+      text-align: left;
+    }
+    .dots::after {
+      content: '...';
+      animation: dots 1s steps(4, end) infinite;
+    }
+    @keyframes dots {
+      0% { content: ''; }
+      25% { content: '.'; }
+      50% { content: '..'; }
+      75% { content: '...'; }
+      100% { content: ''; }
     }
 
-    .dot-pulse {
-      display: inline-flex;
-      gap: 3px;
-      margin-left: 2px;
-    }
-
-    .dot-pulse span {
-      width: 4px;
-      height: 4px;
-      border-radius: 999px;
-      background: #6b7280;
-      animation: pulse 1s infinite ease-in-out;
-    }
-
-    .dot-pulse span:nth-child(2) {
-      animation-delay: 0.15s;
-    }
-
-    .dot-pulse span:nth-child(3) {
-      animation-delay: 0.3s;
-    }
-
-    @keyframes pulse {
-      0%, 100% { transform: translateY(0); opacity: 0.5; }
-      50% { transform: translateY(-2px); opacity: 1; }
-    }
-
-    @media (max-width: 640px) {
-      .chat-container {
-        border-radius: 0;
-        box-shadow: none;
-      }
-      .chat-main {
-        padding-inline: 12px;
-      }
-      .chat-header {
-        padding-inline: 12px;
-      }
-      .chat-footer {
-        padding-inline: 10px;
-      }
+    @keyframes fadeIn { to { opacity: 1; } }
+    @keyframes slideUp { 
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
     }
   </style>
 </head>
-
 <body>
-<div class="app">
-  <div class="chat-container">
-    <div class="chat-header">
-      <div class="chat-header-left">
-        <div class="chat-title">DeepSeek-Speciale Chat</div>
-        <div class="model-badge">V3.2 Speciale · Reasoning</div>
-      </div>
-      <div class="chat-header-right">
-        回车发送 · Shift+回车换行
-      </div>
-    </div>
 
-    <div id="chat" class="chat-main">
-      <!-- 初始欢迎消息 -->
-    </div>
-
-    <div class="chat-footer">
-      <div class="input-row">
-        <textarea
-          id="msg"
-          placeholder="输入消息，按 Enter 发送，Shift+Enter 换行"
-        ></textarea>
-        <button id="sendBtn" class="send-btn" onclick="sendMsg()">
-          <span>发送</span>
-          <span>➤</span>
-        </button>
-      </div>
-      <div class="hint-row">
-        <div class="status" id="statusText">
-          已就绪
-        </div>
-        <div style="font-size:11px;color:#9ca3af;">
-          模型：DeepSeek-V3.2-Speciale
-        </div>
-      </div>
-    </div>
+  <!-- 背景星空 -->
+  <div class="sky-container" id="sky">
+    <div class="stars-rotate" id="starsRotate"></div>
   </div>
-</div>
 
-<script>
-  const chatEl = document.getElementById("chat");
-  const inputEl = document.getElementById("msg");
-  const sendBtn = document.getElementById("sendBtn");
-  const statusText = document.getElementById("statusText");
+  <!-- 前景 UI：Logo + 聊天区 + 输入框 -->
+  <div class="ui-layer">
+    <div class="logo">
+      <span class="logo-main">DeepSeek</span>
+      <span class="logo-sub">Speciale</span>
+    </div>
 
-  // 初始化一条欢迎消息
-  addMessage("bot", "你好，我是接入 DeepSeek-Speciale 的小助手，可以帮你做推理、写代码、分析问题。你想从哪里开始？");
+    <!-- 聊天内容区（中间） -->
+    <div class="chat-wrapper" id="chatWrapper"></div>
 
-  // 监听键盘：Enter 发送，Shift+Enter 换行
-  inputEl.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      sendMsg();
+    <!-- 输入区（底部） -->
+    <div class="search-box">
+      <textarea
+        id="promptInput"
+        class="search-input"
+        rows="1"
+        placeholder="Ask anything..."
+      ></textarea>
+      <button class="search-btn" id="sendBtn" title="发送">
+        <!-- 纸飞机简笔画图标 -->
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="22" y1="2" x2="11" y2="13"></line>
+          <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+        </svg>
+      </button>
+    </div>
+
+    <!-- 输入框下方、全局模型名称：居中 -->
+    <div class="model-hint">DeepSeek-V3.2-Speciale</div>
+  </div>
+
+  <script>
+    /* ========= 1. 旋转星空 ========= */
+    const starsRotate = document.getElementById('starsRotate');
+    const bgStarCount = 150;
+
+    function initSky() {
+      for (let i = 0; i < bgStarCount; i++) {
+        const star = document.createElement('div');
+        star.className = 'star';
+        const s = Math.random() * 2 + 1;
+        star.style.width = s + 'px';
+        star.style.height = s + 'px';
+        star.style.left = Math.random() * 100 + '%';
+        star.style.top = Math.random() * 100 + '%';
+        star.style.setProperty('--dur', (Math.random() * 3 + 2) + 's');
+        star.style.setProperty('--del', (Math.random() * 5) + 's');
+        starsRotate.appendChild(star);
+      }
     }
-  });
 
-  function setLoading(isLoading) {
-    if (isLoading) {
+    /* ========= 2. 流星 ========= */
+    function spawnShootingStar() {
+      const sky = document.getElementById('sky');
+      const star = document.createElement('div');
+      star.className = 'shooting-star';
+      star.style.top = (Math.random() * 50) + '%';
+      star.style.left = (Math.random() * 50 + 50) + '%';
+      star.style.width = (Math.random() * 100 + 50) + 'px';
+      sky.appendChild(star);
+      setTimeout(() => star.remove(), 2500);
+
+      setTimeout(spawnShootingStar, Math.random() * 4000 + 2000);
+    }
+
+    /* ========= 3. 聊天逻辑 ========= */
+
+    // 按需换成你自己的后端地址
+    const API_URL = "/api/chat";
+
+    const chatWrapper = document.getElementById('chatWrapper');
+    const inputEl = document.getElementById('promptInput');
+    const sendBtn = document.getElementById('sendBtn');
+
+    let chatStarted = false;
+    function ensureChatLayoutStarted() {
+      if (chatStarted) return;
+      chatStarted = true;
+      document.body.classList.add('chat-started');
+    }
+
+    function appendMessage(role, text, isThinking = false) {
+      const row = document.createElement('div');
+      row.className = `msg-row ${role}`;
+
+      const bubble = document.createElement('div');
+      bubble.className = 'msg-bubble';
+
+      // 机器人消息：左上角模型名
+      if (role === 'bot') {
+        const tag = document.createElement('div');
+        tag.className = 'msg-model-tag';
+        tag.textContent = 'DeepSeek-V3.2-Speciale';
+        bubble.appendChild(tag);
+      }
+
+      const content = document.createElement('div');
+
+      if (isThinking) {
+        const span = document.createElement('span');
+        span.className = 'dots';
+        content.appendChild(span);
+      } else {
+        content.textContent = text;
+      }
+
+      bubble.appendChild(content);
+
+      row.appendChild(bubble);
+      chatWrapper.appendChild(row);
+
+      chatWrapper.scrollTop = chatWrapper.scrollHeight;
+
+      return { row, bubble };
+    }
+
+    async function sendMessage() {
+      const text = inputEl.value.trim();
+      if (!text) return;
+      inputEl.value = '';
+      autoResizeTextarea();
+
+      ensureChatLayoutStarted();
+
+      appendMessage('user', text);
+      const thinking = appendMessage('bot', '', true);
+
       sendBtn.disabled = true;
-      sendBtn.firstChild.textContent = "发送中";
-      statusText.innerHTML = `
-        正在思考中
-        <span class="dot-pulse">
-          <span></span><span></span><span></span>
-        </span>
-      `;
-    } else {
-      sendBtn.disabled = false;
-      sendBtn.firstChild.textContent = "发送";
-      statusText.textContent = "已就绪";
+
+      try {
+        const res = await fetch(API_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: text })
+        });
+
+        if (!res.ok) {
+          throw new Error("Network error");
+        }
+
+        const data = await res.json();
+        const reply = data.reply || data.content || JSON.stringify(data);
+        // 更新机器人最后一块内容
+        thinking.bubble.querySelector('div:last-child').textContent = reply;
+      } catch (err) {
+        thinking.bubble.querySelector('div:last-child').textContent = "请求出错了，请稍后重试。";
+        console.error(err);
+      } finally {
+        sendBtn.disabled = false;
+        chatWrapper.scrollTop = chatWrapper.scrollHeight;
+      }
     }
-  }
 
-  function addMessage(role, content) {
-    const row = document.createElement("div");
-    row.className = "message-row " + role;
-
-    const avatar = document.createElement("div");
-    avatar.className = "avatar " + role;
-    avatar.textContent = role === "user" ? "你" : "DS";
-
-    const bubble = document.createElement("div");
-    bubble.className = "message-bubble " + role;
-    bubble.textContent = content;
-
-    const meta = document.createElement("div");
-    meta.className = "message-meta";
-    meta.textContent = new Date().toLocaleTimeString("zh-CN", {
-      hour: "2-digit",
-      minute: "2-digit"
+    // 输入框：Enter 发送，Shift+Enter 换行
+    inputEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        if (!e.shiftKey) {
+          e.preventDefault();
+          sendMessage();
+        }
+      }
     });
 
-    bubble.appendChild(meta);
+    sendBtn.addEventListener('click', sendMessage);
 
-    if (role === "bot") {
-      row.appendChild(avatar);
-      row.appendChild(bubble);
-    } else {
-      row.appendChild(bubble);
-      row.appendChild(avatar);
+    // 文本域高度自适应
+    function autoResizeTextarea() {
+      inputEl.style.height = 'auto';
+      inputEl.style.height = Math.min(inputEl.scrollHeight, 120) + 'px';
     }
+    inputEl.addEventListener('input', autoResizeTextarea);
 
-    chatEl.appendChild(row);
-    chatEl.scrollTop = chatEl.scrollHeight;
-  }
-
-  async function sendMsg() {
-    const text = inputEl.value.trim();
-    if (!text || sendBtn.disabled) return;
-
-    addMessage("user", text);
-    inputEl.value = "";
-    setLoading(true);
-
-    try {
-      const res = await fetch("https://deepseek-speciale-chat.vercel.app/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text })
-      });
-
-      let data;
-      try {
-        data = await res.json();
-      } catch (_) {
-        data = { error: "无法解析服务器返回的数据" };
-      }
-
-      if (!res.ok || data.error) {
-        const errText = data && data.error
-          ? `出错了：${data.error}`
-          : `出错了：HTTP ${res.status}`;
-        addMessage("bot", errText);
-      } else {
-        addMessage("bot", data.reply || "（模型没有返回内容）");
-      }
-    } catch (e) {
-      addMessage("bot", "网络错误或服务器不可用，请稍后重试。");
-      console.error(e);
-    } finally {
-      setLoading(false);
-      inputEl.focus();
-    }
-  }
-</script>
+    /* ========= 4. 初始化 ========= */
+    initSky();
+    spawnShootingStar();
+  </script>
 </body>
 </html>
-
