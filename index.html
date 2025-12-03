@@ -368,6 +368,16 @@
       to { opacity: 1; transform: translateY(0); }
     }
   </style>
+
+  <!-- Markdown 解析 -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <!-- XSS 安全过滤 -->
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.5/dist/purify.min.js"></script>
+
+  <!-- KaTeX 数学公式 -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.7/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.7/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.7/dist/contrib/auto-render.min.js"></script>
 </head>
 <body>
 
@@ -409,6 +419,35 @@
   </div>
 
   <script>
+    // ========= Markdown + LaTeX 渲染工具 =========
+    function renderMarkdownToElement(el, text) {
+      if (!text) {
+        el.textContent = "";
+        return;
+      }
+
+      // Markdown -> HTML
+      const html = marked.parse(text);
+
+      // XSS 过滤
+      const safeHtml = DOMPurify.sanitize(html);
+
+      // 塞进 DOM
+      el.innerHTML = safeHtml;
+
+      // 渲染数学公式（如果 KaTeX 已加载）
+      if (window.renderMathInElement) {
+        renderMathInElement(el, {
+          delimiters: [
+            { left: "$$", right: "$$", display: true },
+            { left: "$", right: "$", display: false },
+            { left: "\\(", right: "\\)", display: false },
+            { left: "\\[", right: "\\]", display: true }
+          ]
+        });
+      }
+    }
+
     /* ========= 1. 旋转星空 ========= */
     const starsRotate = document.getElementById('starsRotate');
     const bgStarCount = 150;
@@ -470,7 +509,7 @@
 
       const content = document.createElement('div');
       content.className = 'reasoning-content';
-      content.textContent = text;
+      content.textContent = text; // 推理内容一般纯文本，保留 textContent 即可
       details.appendChild(content);
 
       return details;
@@ -500,7 +539,8 @@
         span.className = 'dots';
         main.appendChild(span);
       } else {
-        main.textContent = text;
+        // 用 Markdown + LaTeX 渲染内容（用户和机器人统一处理）
+        renderMarkdownToElement(main, text);
       }
 
       bubble.appendChild(main);
@@ -553,8 +593,8 @@
         const reply = data.reply || data.content || "（无返回内容）";
         const reasoning = data.reasoning || null;
 
-        // 更新机器人最后一块内容
-        thinking.main.textContent = reply;
+        // 更新机器人最后一块内容（Markdown 渲染）
+        renderMarkdownToElement(thinking.main, reply);
 
         // 把最新一轮 assistant 内容也塞进 history
         history.push({ role: "assistant", content: reply });
