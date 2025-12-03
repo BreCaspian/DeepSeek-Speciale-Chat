@@ -315,7 +315,7 @@
     }
 
     @keyframes fadeIn { to { opacity: 1; } }
-    @keyframes slideUp { 
+    @keyframes slideUp {
       from { opacity: 0; transform: translateY(20px); }
       to { opacity: 1; transform: translateY(0); }
     }
@@ -396,12 +396,14 @@
 
     /* ========= 3. 聊天逻辑 ========= */
 
-    // 按需换成你自己的后端地址
     const API_URL = "/api/chat";
 
     const chatWrapper = document.getElementById('chatWrapper');
     const inputEl = document.getElementById('promptInput');
     const sendBtn = document.getElementById('sendBtn');
+
+    // 用于发给后端的对话历史
+    const history = [];
 
     let chatStarted = false;
     function ensureChatLayoutStarted() {
@@ -453,7 +455,11 @@
 
       ensureChatLayoutStarted();
 
+      // 显示用户消息 + 记录到历史
       appendMessage('user', text);
+      history.push({ role: "user", content: text });
+
+      // 显示“思考中”占位
       const thinking = appendMessage('bot', '', true);
 
       sendBtn.disabled = true;
@@ -462,7 +468,10 @@
         const res = await fetch(API_URL, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message: text })
+          body: JSON.stringify({
+            message: text,
+            history, // 把完整历史发给后端
+          })
         });
 
         if (!res.ok) {
@@ -471,10 +480,16 @@
 
         const data = await res.json();
         const reply = data.reply || data.content || JSON.stringify(data);
+
         // 更新机器人最后一块内容
         thinking.bubble.querySelector('div:last-child').textContent = reply;
+
+        // 把这次回复加入历史
+        history.push({ role: "assistant", content: reply });
       } catch (err) {
-        thinking.bubble.querySelector('div:last-child').textContent = "请求出错了，请稍后重试。";
+        const errMsg = "请求出错了，请稍后重试。";
+        thinking.bubble.querySelector('div:last-child').textContent = errMsg;
+        history.push({ role: "assistant", content: errMsg });
         console.error(err);
       } finally {
         sendBtn.disabled = false;
