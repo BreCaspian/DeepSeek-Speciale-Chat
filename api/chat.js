@@ -1,5 +1,3 @@
-// api/chat.js
-
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
@@ -41,7 +39,7 @@ export default async function handler(req, res) {
             typeof m.role === "string" &&
             typeof m.content === "string"
         )
-        .slice(-20);
+        .slice(-8);
     }
   } catch (e) {
     res.statusCode = 400;
@@ -90,19 +88,24 @@ export default async function handler(req, res) {
           Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-          model: "deepseek-reasoner",
+          model: "deepseek-chat",
           messages,
           stream: false,
-          max_output_tokens: 8192,
+          max_output_tokens: 2048,
           temperature: 0.2,
           top_p: 0.95,
         }),
       }
     );
 
-    const json = await dsRes.json();
+    let json;
+    try {
+      json = await dsRes.json();
+    } catch (e) {
+      json = null;
+    }
 
-    if (!dsRes.ok || json.error) {
+    if (!dsRes.ok || (json && json.error)) {
       console.error("DeepSeek API error:", json);
       res.statusCode = dsRes.status || 500;
       res.setHeader("Content-Type", "application/json");
@@ -115,7 +118,9 @@ export default async function handler(req, res) {
       return;
     }
 
-    const choice = json.choices?.[0] || {};
+    const choice = json && Array.isArray(json.choices) && json.choices[0]
+      ? json.choices[0]
+      : {};
     const msg = choice.message || {};
 
     const reply = msg.content || "（DeepSeek 没有返回内容）";
